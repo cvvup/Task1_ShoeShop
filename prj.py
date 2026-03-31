@@ -417,18 +417,6 @@ def product_list_html(user: dict[str, object] | None, query: dict[str, str]) -> 
     if can_filter and supplier and supplier != "Все поставщики":
         sql += " AND suppliers.name = ?"
         params.append(supplier)
-    if can_filter and search.strip():
-        words = [word for word in search.strip().lower().split() if word]
-        for word in words:
-            mask = "%" + word + "%"
-            sql += """
-            AND (
-              lower(products.article) LIKE ? OR lower(products.name) LIKE ? OR lower(products.unit) LIKE ?
-              OR lower(products.description) LIKE ? OR lower(suppliers.name) LIKE ?
-              OR lower(manufacturers.name) LIKE ? OR lower(categories.name) LIKE ?
-            )
-            """
-            params.extend([mask] * 7)
     if can_filter and sort == "asc":
         sql += " ORDER BY products.stock_quantity ASC, products.id ASC"
     elif can_filter and sort == "desc":
@@ -439,6 +427,25 @@ def product_list_html(user: dict[str, object] | None, query: dict[str, str]) -> 
     with connect() as conn:
         products = conn.execute(sql, params).fetchall()
         suppliers = [row["name"] for row in conn.execute("SELECT name FROM suppliers ORDER BY name").fetchall()]
+
+    if can_filter and search.strip():
+        words = [word.casefold() for word in search.strip().split() if word]
+        filtered_products = []
+        for product in products:
+            haystack = " ".join(
+                [
+                    str(product["article"]),
+                    str(product["name"]),
+                    str(product["unit"]),
+                    str(product["description"]),
+                    str(product["supplier_name"]),
+                    str(product["manufacturer_name"]),
+                    str(product["category_name"]),
+                ]
+            ).casefold()
+            if all(word in haystack for word in words):
+                filtered_products.append(product)
+        products = filtered_products
 
     filters = ""
     if can_filter:
@@ -467,7 +474,7 @@ def product_list_html(user: dict[str, object] | None, query: dict[str, str]) -> 
         let t;
         function autoSend() {{
           clearTimeout(t);
-          t = setTimeout(() => document.getElementById('filterForm').submit(), 300);
+          t = setTimeout(() => document.getElementById('filterForm').submit(), 500);
         }}
         document.getElementById('searchInput').addEventListener('input', autoSend);
         document.getElementById('supplierInput').addEventListener('change', autoSend);
